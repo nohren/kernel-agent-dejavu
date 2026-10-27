@@ -192,6 +192,7 @@ def main():
     ap.add_argument("--real-gate", help="real keys at the target shape (make_real_keys.py): gated on and timed on")
     ap.add_argument("--heldout", help="held-out real keys, checked for every passing candidate after the run only")
     ap.add_argument("--seed", help="a kernel from an earlier run to start from; its code and results go to the agent")
+    ap.add_argument("--hint", default="", help="extra guidance added to the agent's first message")
     ap.add_argument("--out", default=str(HERE / "runs"), help="parent folder for run folders (e.g. on Google Drive)")
     args = ap.parse_args()
 
@@ -253,7 +254,7 @@ def main():
     client = anthropic.Anthropic()
     messages = [{"role": "user", "content": (
         f"Baseline measurements on {args.shape}:\n{summarize(base)}\n\nNsight Compute (baseline):\n{base_prof}\n\n"
-        f"{tuned_note}{seed_note}Propose candidate 1.")}]
+        f"{tuned_note}{seed_note}{args.hint + chr(10) * 2 if args.hint else ''}Propose candidate 1.")}]
     total_cost, stale = 0.0, 0
     for it in range(1, args.iters + 1):
         try:
