@@ -98,9 +98,10 @@ are making to address it.
 
 
 REAL_GATE_NOTE = """, and on real post-RoPE keys from Qwen2.5-1.5B at exactly the target shape: 8 rows, each one \
-(layer, head) pair with 32768 keys and 2048 converged spherical k-means centroids, every key checked. Real keys have \
-large outlier channels, and the layer-0 row is nearly degenerate: all keys point almost the same way (|key| ~800), \
-so every centroid scores within ~0.15% of the best. Per-row results come back as real_checks. A held-out set of real \
+(layer, head) pair with 32768 keys and 2048 unit-length centroids, every key checked. The keys are prepared the way \
+Double-P clusters them (first 4 and last 64 prompt tokens dropped, the head's mean key subtracted) and the centroids \
+come from Double-P's segment k-means. Real keys have larger outlier channels than Gaussian ones, and neighbouring \
+tokens often share a centroid. Per-row results come back as real_checks. A held-out set of real \
 keys from other layers, heads and prompts is checked after the run and never shown to you, so do not special-case \
 the gate data"""
 
