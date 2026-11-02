@@ -2,11 +2,11 @@
 
 I created a Claude driven agent loop which optimized Double-P’s Triton k-means assignment kernel achieving a **1.38× median speedup** on an A100 across 16 real Qwen2.5-1.5B layer KV head key sets. This kernel was the sixth candidate, **iter06**, and passed the specified correctness tolerance at 2,048 centroids.
 
-This comparison covers the original and iter06. Measurements and reproduction steps are in [`kernel_explained.ipynb`](kernel_explained.ipynb) and [`results/`](results/).
+This comparison covers the original and iter06. Measurements and reproduction steps are in [`kernel_explained.ipynb`](notebooks/kernel_explained.ipynb) and [`results/`](results/).
 
 ## Workload and measurement
 
-For each key, the kernel selects the centroid with the largest dot product, adds the key to that centroid’s sum, and increments its count. Each launch processes eight independent key sets, each containing 32,768 keys of dimension 128 and 2,048 unit-length centroids. Inputs are BF16; sums use FP32.
+For each key, the kernel selects the centroid with the largest dot product, adds the key to that centroid’s sum, and increments its count. Each launch processes eight independent key sets, each containing 32,768 keys of dimension 128 and 2,048 unit-length centroids. Inputs are BF16 and sums use FP32.
 
 The evaluation uses 16 layer KV head key sets from two text prompts. For individual measurements, each key set is replicated across all eight batch slots, preserving the launch shape. These are kernel timings, not end to end model speedups.
 
@@ -26,7 +26,7 @@ The median individual-case speedup is **1.38×**. For every key, the chosen scor
 
 **Packed argmax with a deferred reduction.** The original reduces each score tile to a maximum and index inside the centroid loop. iter06 replaces the low score bits with the centroid index, maintains elementwise maxima across iterations, and performs one reduction after the loop. This reduces repeated reduction work and sacrifices score precision.
 
-With $C$ centroids, the index occupies $b=\lceil\log_2 C\rceil$ bits, leaving $p=23-b$ FP32 fraction bits. Packing can change the winner within a truncated-score bin. The discarded bits sum to less than one unit of the last retained place; the binary exponent scales that bin’s width.
+With $C$ centroids, the index occupies $b=\lceil\log_2 C\rceil$ bits, leaving $p=23-b$ FP32 fraction bits. Packing can change the winner within a truncated-score bin. The discarded bits sum to less than one unit of the last retained place.  The binary exponent scales that bin’s width. The bound doubles with each doubling of $C$.
 
 For a nonzero key and unit-length centroids, the idealized packing-only regret bound is:
 
@@ -34,7 +34,7 @@ $$
 \frac{s_{\mathrm{best}}-s_{\mathrm{chosen}}}{\lVert k\rVert_2}
 \le 2^{-(23-b)}.
 $$
-The bound doubles with each doubling of $C$.
+
 ```python
    for start in range(0, C, BLOCK_K):
         x = tl.load(x_ptrs)
@@ -105,6 +105,17 @@ The same request count touches **about 3.9× fewer 32-byte sectors**, supporting
 ## Limits
 
 Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid-index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2^{-12}$ tolerance, consistent with that tradeoff. Whether the larger $C$ meaningfully affect downstream model quality has not been evaluated.
+
+$$
+\frac{s_{\mathrm{best}} - s_{\mathrm{chosen}}}{\lVert k \rVert_2}
+\le 2^{-(23-b)},
+\qquad b = \lceil \log_2 C \rceil
+$$
+
+
+## Whats Next
+Account for the remaining improvement from 1.252× to 1.368×.  In order to do this 
+
 
 Source: [Double-P](https://arxiv.org/abs/2602.05191). Terminology: [Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
 
