@@ -1,0 +1,10 @@
+# README names: "gate keys" = evaluation set A, "held-out keys" = evaluation set B; "normal" = set A key set L3h1.
+# kernel_explained.ipynb section 3 (cell 11), A100; rows trimmed to the original and iter06 on real keys.
+# phase-1 rule: abs gap < 0.05. phase-2 rule: cos gap <= 2^-12 (~2.44e-4). Both also require exact sums and counts.
+
+gate keys
+  original phase-1 rule PASS | phase-2 rule PASS | min agree 1.00000 | worst abs gap 0.0e+00 | worst cos gap 0.0e+00 | failing rows: rule 1 -, rule 2 -
+  iter06   phase-1 rule PASS | phase-2 rule PASS | min agree 0.99957 | worst abs gap 6.8e-03 | worst cos gap 1.9e-04 | failing rows: rule 1 -, rule 2 -
+held-out keys
+  original phase-1 rule PASS | phase-2 rule PASS | min agree 1.00000 | worst abs gap 0.0e+00 | worst cos gap 0.0e+00 | failing rows: rule 1 -, rule 2 -
+  iter06   phase-1 rule PASS | phase-2 rule PASS | min agree 0.99973 | worst abs gap 4.1e-03 | worst cos gap 9.6e-05 | failing rows: rule 1 -, rule 2 -

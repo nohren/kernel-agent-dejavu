@@ -1,0 +1,34 @@
+# README names: "gate keys" = evaluation set A, "held-out keys" = evaluation set B; "normal" = set A key set L3h1.
+# kernel_explained.ipynb section 4, A100; rows trimmed to the original and iter06 on real keys. Same-process timing:
+# every kernel timed in rotating rounds, scored by the median per-round ratio to the original; kernel-only (zeroing s
+# and cnt timed separately and subtracted).
+
+## Whole batches, 8 rows at once (cell 14)
+
+gate keys
+  original                         0.899 ms  1.000x vs original (rounds 1.000-1.000)
+  iter06                           0.654 ms  1.374x vs original (rounds 1.364-1.392)
+held-out keys
+  original                         0.905 ms  1.000x vs original (rounds 1.000-1.000)
+  iter06                           0.657 ms  1.381x vs original (rounds 1.376-1.399)
+
+## One (layer, head) at a time, the row copied into all 8 batch slots (cell 16); first 8 gate, last 8 held-out
+
+L 0h0  original 0.889 ms | iter06 0.655 ms 1.36x
+L 3h1  original 0.900 ms | iter06 0.655 ms 1.38x
+L 7h0  original 0.902 ms | iter06 0.659 ms 1.38x
+L11h1  original 0.903 ms | iter06 0.661 ms 1.37x
+L15h0  original 0.907 ms | iter06 0.660 ms 1.38x
+L19h1  original 0.921 ms | iter06 0.659 ms 1.40x
+L23h0  original 0.898 ms | iter06 0.655 ms 1.37x
+L27h1  original 0.902 ms | iter06 0.658 ms 1.37x
+L 0h1  original 0.906 ms | iter06 0.655 ms 1.38x
+L 2h0  original 0.912 ms | iter06 0.658 ms 1.39x
+L 6h1  original 0.906 ms | iter06 0.660 ms 1.37x
+L10h0  original 0.915 ms | iter06 0.659 ms 1.39x
+L14h1  original 0.919 ms | iter06 0.668 ms 1.39x
+L18h0  original 0.918 ms | iter06 0.662 ms 1.40x
+L22h1  original 0.911 ms | iter06 0.660 ms 1.38x
+L26h0  original 0.902 ms | iter06 0.658 ms 1.37x
+
+iter06: 16 rows 1.36-1.40x (median 1.38x)

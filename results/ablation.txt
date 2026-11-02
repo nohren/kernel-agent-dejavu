@@ -1,0 +1,20 @@
+# README names: "gate keys" = evaluation set A, "held-out keys" = evaluation set B; "normal" = set A key set L3h1.
+# kernel_explained.ipynb section 4, ablation (cell 18), A100; trimmed to the real-key run. Steps from k_ablation.py,
+# all at the original's launch config (BLOCK_N=128, BLOCK_K=32, num_warps=4, num_stages=2).
+# "normal" = gate row L3h1 in all 8 batch slots.
+
+correctness on gate keys (phase-2 rule)
+  plain argmax, tile atomics       PASS  worst cos gap 0.0e+00
+  packed argmax, tile atomics      PASS  worst cos gap 1.9e-04
+  plain argmax, flat atomics       PASS  worst cos gap 0.0e+00
+  packed, flat (stride visible)    PASS  worst cos gap 1.9e-04
+  packed, flat (iter06 style)      PASS  worst cos gap 1.9e-04
+
+normal
+  original                         0.903 ms  1.000x vs original (rounds 1.000-1.000)
+  plain argmax, tile atomics       0.924 ms  0.980x vs original (rounds 0.977-0.984)
+  packed argmax, tile atomics      0.854 ms  1.060x vs original (rounds 1.054-1.069)
+  plain argmax, flat atomics       0.787 ms  1.153x vs original (rounds 1.145-1.159)
+  packed, flat (stride visible)    0.835 ms  1.082x vs original (rounds 1.077-1.090)
+  packed, flat (iter06 style)      0.722 ms  1.252x vs original (rounds 1.244-1.255)
+  iter06                           0.660 ms  1.368x vs original (rounds 1.365-1.374)

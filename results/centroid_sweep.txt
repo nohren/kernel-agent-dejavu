@@ -1,0 +1,69 @@
+# README names: "gate" = evaluation set A, "heldout" = evaluation set B.
+# centroid_sweep.ipynb output; synthetic rows removed. Same correctness checks at C = 2048, 4096, 8192 centroids.
+# bound = worst-case packing bound 2^(b-23) with b = ceil(log2 C). Pass/fail tolerance stays 2^-12 (2.44e-4) at every C.
+# For C > 2048: the key set's 2,048 k-means centroids keep IDs 0-2047, followed by C - 2048 random unit-length decoy
+# centroids. "shuffled": the same centroids in a fixed random order, labels mapped back to the unshuffled IDs.
+# IDs>=2048: share of keys that chose a decoy. regret/step: worst gap divided by one packing step at the best score.
+
+  C   b     bound | kernel   input             pass worst cos gap   x tol regret/step min agree IDs>=2048 same as unshuf
+ 2048  11  2.44e-04 | original gate              8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original gate shuffled     8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+                    | original heldout           8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original heldout shuffled  8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+ 2048  11  2.44e-04 | iter06   gate              8/8      1.872e-04    0.77       0.910   0.99957     0.000            nan
+                    | iter06   gate shuffled     8/8      1.872e-04    0.77       0.910   0.99957     0.000        0.99951
+                    | iter06   heldout           8/8      9.589e-05    0.39       0.522   0.99973     0.000            nan
+                    | iter06   heldout shuffled  8/8      9.346e-05    0.38       0.538   0.99982     0.000        0.99966
+ 4096  12  4.88e-04 | original gate              8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original gate shuffled     8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+                    | original heldout           8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original heldout shuffled  8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+ 4096  12  4.88e-04 | iter06   gate              7/8      3.560e-04    1.46       0.803   0.99927     0.000            nan
+                    | iter06   gate shuffled     8/8      2.199e-04    0.90       0.688   0.99911     0.000        0.99918
+                    | iter06   heldout           8/8      2.401e-04    0.98       0.675   0.99936     0.000            nan
+                    | iter06   heldout shuffled  7/8      3.323e-04    1.36       0.894   0.99930     0.000        0.99927
+ 8192  13  9.77e-04 | original gate              8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original gate shuffled     8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+                    | original heldout           8/8      0.000e+00    0.00       0.000   1.00000     0.000            nan
+                    | original heldout shuffled  8/8      0.000e+00    0.00       0.000   1.00000     0.000        1.00000
+ 8192  13  9.77e-04 | iter06   gate              2/8      7.474e-04    3.06       0.871   0.99884     0.000            nan
+                    | iter06   gate shuffled     2/8      7.474e-04    3.06       0.960   0.99872     0.000        0.99878
+                    | iter06   heldout           3/8      6.122e-04    2.51       0.861   0.99902     0.000            nan
+                    | iter06   heldout shuffled  4/8      6.877e-04    2.82       0.882   0.99847     0.000        0.99878
+
+First observed failure among the tested C values:
+  original gate             no failure observed
+  original gate shuffled    no failure observed
+  original heldout          no failure observed
+  original heldout shuffled no failure observed
+  iter06   gate             C = 4096
+  iter06   gate shuffled    C = 8192
+  iter06   heldout          C = 8192
+  iter06   heldout shuffled C = 4096
+
+## Per key set: pass/fail and worst cosine gap
+
+C = 2048  original gate             L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 2048  original gate shuffled    L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 2048  original heldout          L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 2048  original heldout shuffled L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 2048  iter06   gate             L0h0 ok 1.9e-04  L3h1 ok 5.8e-06  L7h0 ok 4.3e-05  L11h1 ok 5.9e-05  L15h0 ok 4.1e-05  L19h1 ok 3.2e-05  L23h0 ok 1.8e-04  L27h1 ok 2.7e-05
+C = 2048  iter06   gate shuffled    L0h0 ok 1.9e-04  L3h1 ok 5.8e-06  L7h0 ok 2.1e-05  L11h1 ok 6.1e-05  L15h0 ok 4.1e-05  L19h1 ok 8.9e-06  L23h0 ok 1.8e-04  L27h1 ok 2.7e-05
+C = 2048  iter06   heldout          L0h1 ok 9.6e-05  L2h0 ok 2.5e-05  L6h1 ok 0.0e+00  L10h0 ok 1.1e-05  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 2.3e-05  L26h0 ok 3.5e-05
+C = 2048  iter06   heldout shuffled L0h1 ok 9.3e-05  L2h0 ok 2.5e-05  L6h1 ok 1.9e-05  L10h0 ok 4.9e-05  L14h1 ok 0.0e+00  L18h0 ok 7.2e-06  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 4096  original gate             L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 4096  original gate shuffled    L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 4096  original heldout          L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 4096  original heldout shuffled L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 4096  iter06   gate             L0h0 FAIL 3.6e-04  L3h1 ok 5.8e-06  L7h0 ok 4.3e-05  L11h1 ok 5.9e-05  L15h0 ok 4.1e-05  L19h1 ok 3.2e-05  L23h0 ok 1.8e-04  L27h1 ok 1.4e-04
+C = 4096  iter06   gate shuffled    L0h0 ok 2.2e-04  L3h1 ok 9.3e-05  L7h0 ok 4.3e-05  L11h1 ok 6.1e-05  L15h0 ok 1.5e-04  L19h1 ok 6.5e-05  L23h0 ok 7.0e-05  L27h1 ok 0.0e+00
+C = 4096  iter06   heldout          L0h1 ok 2.4e-04  L2h0 ok 1.2e-04  L6h1 ok 0.0e+00  L10h0 ok 1.1e-05  L14h1 ok 1.1e-04  L18h0 ok 1.5e-04  L22h1 ok 2.3e-05  L26h0 ok 3.5e-05
+C = 4096  iter06   heldout shuffled L0h1 FAIL 3.3e-04  L2h0 ok 1.2e-04  L6h1 ok 1.9e-05  L10h0 ok 2.2e-04  L14h1 ok 0.0e+00  L18h0 ok 7.2e-06  L22h1 ok 9.5e-05  L26h0 ok 1.1e-04
+C = 8192  original gate             L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 8192  original gate shuffled    L0h0 ok 0.0e+00  L3h1 ok 0.0e+00  L7h0 ok 0.0e+00  L11h1 ok 0.0e+00  L15h0 ok 0.0e+00  L19h1 ok 0.0e+00  L23h0 ok 0.0e+00  L27h1 ok 0.0e+00
+C = 8192  original heldout          L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 8192  original heldout shuffled L0h1 ok 0.0e+00  L2h0 ok 0.0e+00  L6h1 ok 0.0e+00  L10h0 ok 0.0e+00  L14h1 ok 0.0e+00  L18h0 ok 0.0e+00  L22h1 ok 0.0e+00  L26h0 ok 0.0e+00
+C = 8192  iter06   gate             L0h0 FAIL 7.5e-04  L3h1 FAIL 3.2e-04  L7h0 FAIL 2.6e-04  L11h1 FAIL 3.0e-04  L15h0 ok 2.4e-04  L19h1 ok 2.2e-04  L23h0 FAIL 2.6e-04  L27h1 FAIL 4.4e-04
+C = 8192  iter06   gate shuffled    L0h0 FAIL 7.5e-04  L3h1 FAIL 3.7e-04  L7h0 FAIL 4.3e-04  L11h1 FAIL 3.1e-04  L15h0 FAIL 4.3e-04  L19h1 ok 2.0e-04  L23h0 ok 1.8e-04  L27h1 FAIL 2.7e-04
+C = 8192  iter06   heldout          L0h1 FAIL 5.2e-04  L2h0 ok 1.2e-04  L6h1 FAIL 3.1e-04  L10h0 FAIL 3.6e-04  L14h1 ok 1.1e-04  L18h0 ok 1.5e-04  L22h1 FAIL 6.1e-04  L26h0 FAIL 3.2e-04
+C = 8192  iter06   heldout shuffled L0h1 FAIL 6.9e-04  L2h0 ok 1.7e-04  L6h1 FAIL 3.3e-04  L10h0 FAIL 3.6e-04  L14h1 ok 0.0e+00  L18h0 ok 1.5e-04  L22h1 ok 1.4e-04  L26h0 FAIL 4.1e-04
