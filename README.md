@@ -47,9 +47,9 @@ $$
 \qquad b=\lceil\log_2 C\rceil.
 $$
 
-This bound excludes dot-product rounding error.
+This bound excludes dot-product rounding error. At 2,048 centroids, `MASK_HI = -2048` clears 11 low bits and `MASK_LO = 2047` extracts the index. The general technique is to defer cross-element reductions when an elementwise running state can preserve the required result; packing additionally trades precision for simpler index tracking.
 
-**Flat reload epilogue.** After storing assignments, iter06 reloads keys in flat chunks before atomic accumulation. The kernel uses `@triton.jit(do_not_specialize=["stride_one"])`, and the caller passes `stride_one=1`. Preventing specialization to 1 changes the compiled layout: neighboring lanes update consecutive columns instead of every fourth column.
+**Flat reload epilogue.** After storing assignments, iter06 reloads keys in flat chunks before atomic accumulation. The kernel uses `@triton.jit(do_not_specialize=["stride_one"])`, and the caller passes `stride_one=1`. In this flat epilogue, preventing specialization to 1 changes the compiled layout: neighboring lanes update consecutive columns instead of every fourth column. The excerpt below runs after labels are stored and the block synchronizes; base pointers select the current batch item.
 
 ```python
 ii = tl.arange(0, EPI_ROWS * D)
@@ -69,84 +69,110 @@ for r0 in range(0, BLOCK_N, EPI_ROWS):
     )
 ```
 
-## Ablation and profiling
+## What the ablations establish
 
-The ablation uses one key set. Variants retain the original tile settings unless noted. All pass the specified correctness checks at 2,048 centroids.
+The following Nsight Compute measurements use one key set and locked clocks; they are separate from the benchmark timings above. All variants pass the specified checks at 2,048 centroids. **Constant** and **runtime** strides both equal 1; only whether the compiler knows that value differs. “Packed” includes deferred reduction; “tile” accumulates from the existing key tile.
 
-**Matching tile settings closes the gap.** iter06 uses 64 centroids per tile instead of 32, and reloads 16 keys per epilogue chunk instead of 32. Applying both settings to the combined variant gives:
+| Variant | Argmax | Accumulation | Column stride | Time (µs) | Atomic sectors/request |
+|---|---|---|---|---:|---:|
+| Original | Plain | Tile | Constant | 1,105 | 16.03 |
+| v1: rewritten baseline | Plain | Tile | Constant | 1,107 | 16.03 |
+| v2 | Packed | Tile | Constant | 1,026 | 16.03 |
+| v3 | Plain | Flat reload | Runtime | 908 | 4.12 |
+| v4 | Packed | Flat reload | Constant | 998 | 16.03 |
+| v5 | Packed | Flat reload | Runtime | 838 | 4.12 |
+| v8 | Plain | Tile | Runtime | 1,417 | 31.90 |
+| v9 | Packed | Tile | Runtime | 1,548 | 31.90 |
+| v6: matched tile settings | Packed | Flat reload | Runtime | 768 | 4.12 |
+| iter06 | Packed | Flat reload | Runtime | 776 | 4.12 |
 
-| Variant | Time | Speedup vs original |
-|---|---:|---:|
-| Packed argmax + flat reload, runtime stride | 0.714 ms | 1.265× |
-| Same, with iter06’s tile settings | 0.660 ms | 1.370× |
-| Full iter06 | 0.653 ms | 1.379× |
+**Packing reduces instructions.** Matched comparisons show 31–33% fewer executed warp instructions, with unchanged sectors/request. Overall, iter06 executes 115.8M versus the original’s 159.8M instructions: **27.6% fewer**.
 
-With those settings, the ablation kernel produces identical SASS after normalizing kernel names. The individual contributions of the two settings are not isolated.
+**Flat reload and runtime stride work together here.** Flattening alone leaves sectors/request at 16.03. Runtime stride on the tile epilogue increases them to 31.90. Their combination reaches 4.12. Every variant issues 1,056,768 atomic requests, so the improvement is in how those requests access memory.
 
-Nsight Compute reports the following. These locked-clock profiling durations are separate from the benchmark timings above.
+**Tile settings close the remaining gap.** v6 changes v5’s `BLOCK_K` from 32 to 64 and `EPI_ROWS` from 32 to 16, reproducing iter06’s SASS after normalizing kernel names. 
+## Reading the thread mapping beneath Triton
 
-| Variant | Atomic sectors/request | Executed warp instructions | Duration (µs) |
-|---|---:|---:|---:|
-| Original | 16.03 | 159.8M | 1,085 |
-| Rewritten baseline | 16.03 | 163.8M | 1,108 |
-| Packed argmax only | 16.03 | 110.2M | 1,026 |
-| Flat reload only, runtime stride | 4.12 | 173.5M | 908 |
-| Both changes, constant stride | 16.03 | 117.2M | 988 |
-| Both changes, runtime stride | 4.12 | 120.4M | 833 |
-| Same, with iter06’s tile settings | 4.12 | 115.8M | 768 |
-| Full iter06 | 4.12 | 115.8M | 767 |
+The GPU partitions each thread block into warps of 32 consecutive threads.
+Each thread occupies a warp lane numbered 0–31. A warp scheduler issues
+an instruction to the warp’s active threads.
 
-**Packing cuts instructions; the runtime-stride flat reload cuts sectors.** Packing removes 31–33% of executed instructions in the matched comparisons, while leaving sectors per request unchanged. Every variant issues 1,056,768 atomic requests. Overall, iter06 executes **27.6% fewer instructions** and touches **about 3.9× fewer atomic sectors** than the original.
+Triton’s layout determines which tensor elements each thread owns.
+Changing the layout changes the elements assigned to threads, but it does
+not change how the GPU partitions threads into warps. The TTGIR below exposes
+this element to thread mapping. 
 
-### How the threads are assigned
+For these kernels, each block contains 128 threads: four warps of 32.
+To understand atomic access efficiency, examine the destination address
+used by each active thread when its warp executes one atomic instruction.
 
-TTGIR records the mapping from tensor elements to threads. Each sum atomic compiles to one scalar FP32 reduction per element a thread holds (`RED.E.ADD.F32.FTZ.RN.STRONG.GPU` in SASS), so every variant issues 512 sum-atomic requests and four count-atomic requests per block. The layout changes which addresses neighboring lanes access within each request:
+Each cell shows one thread’s update during the same warp level atomic
+instruction. `s[b, c, d]` stores component `d` of centroid `c`’s accumulated
+sum in batch `b`. Atomic updates are written as += for readability.
 
-| Sum-atomic layout | Columns accessed by one warp instruction | 32-byte sectors |
-|---|---|---:|
-| Original; flat reload with constant stride | 0, 4, …, 124 | 16 |
-| Flat reload with runtime stride | 0, 1, …, 31 | 4 |
+| Implementation | Thread at lane 0 | Thread at lane 1 | Thread at lane 2 |
+|---|---|---|---|
+| Original tile; flat reload with constant stride | `s[b, c, 0] += key[0]` | `s[b, c, 4] += key[4]` | `s[b, c, 8] += key[8]` |
+| Flat reload with runtime stride | `s[b, c, 0] += key[0]` | `s[b, c, 1] += key[1]` | `s[b, c, 2] += key[2]` |
+| Tile with runtime stride | `s[b, c0, 0] += key0[0]` | `s[b, c1, 0] += key1[0]` | `s[b, c0, 0] += key2[0]` |
 
-Each sector holds eight FP32 values. Consecutive columns place eight lanes’ accesses in each sector; every-fourth-column accesses place only two.
+In the first two rows, threads process components of the same key,
+assigned to centroid `c`. In the third row, threads process different
+keys, whose chosen centroids `c0`, `c1`, and `c100` etc. may coincide.
 
-**The constant stride also adds layout conversions.** With the stride visible, Triton loads 8 values per thread (16-byte loads) but gives the atomic 4 per thread, so it converts the keys and their addresses between the two layouts. With the runtime stride, one layout serves both the loads and the atomic:
+A sector is an aligned 32-byte chunk of memory in a cache line or device memory. For instance an L1 or L2 cache line is four sectors i.e 128 bytes. [see here](https://docs.nvidia.com/nsight-compute/ProfilingGuide). This means that each aligned sector can contain eight FP32 values. With 32 active threads, aligned memory access touches four sectors.  Accessing columns `0, 4, …, 124` touches 16 sectors, two threads access values in each sector.
 
-```mlir
-// Constant stride (ir/v4/v4.ttgir), epilogue loop
-#blocked  = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+**For scalar atomic instructions.** Threads participate together in each warp instruction, then process their other values through additional instructions.
+
+| Atomic instruction | Lane 0 updates | Lane 1 updates | Lane 2 updates | … Lane 31 updates |
+|---|---:|---:|---:|---:|
+| First | 0 | 4 | 8 | 124 |
+| Second | 1 | 5 | 9 | 125 |
+| Third | 2 | 6 | 10 | 126 |
+| Fourth | 3 | 7 | 11 | 127 |
+
+Read **across a row** for the work performed by threads together. Read **down a column** for one thread’s work across instructions.
+
+
+This explains the inefficiency: **each row touches 16 sectors**, even though each thread’s four values are adjacent. Coalescing concerns addresses accessed **across threads in one instruction**. **`sizePerThread = [1]` means one consecutive element per thread before the layout moves to the next thread**. 
+
+For a simple **one-warp example** covering 128 values:
+
+| Instruction | Lane 0 | Lane 1 | Lane 2 | … Lane 31 |
+|---|---:|---:|---:|---:|
+| First | 0 | 1 | 2 | 31 |
+| Second | 32 | 33 | 34 | 63 |
+| Third | 64 | 65 | 66 | 95 |
+| Fourth | 96 | 97 | 98 | 127 |
+
+Each thread still handles four values, but they are distributed differently:
+
+- **Old lane 0:** `0, 1, 2, 3`
+- **New lane 0:** `0, 32, 64, 96`
+
+Both perform **four warp instructions and 128 additions**. The old mapping touches 16 sectors per instruction; the new mapping touches four.
+
+
+
+ TTGIR evidence is the flat epilogue’s load and atomic layouts. Below, aliases are renamed and operations abbreviated for readability:
+
+```
+// v4: layouts used by the flat epilogue.
+// Key loads use #blocked; sum atomics use #blocked4.
+#blocked = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
 #blocked4 = #ttg.blocked<{sizePerThread = [4], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
-%kv_71 = tt.load %kv_70, %rmask_64, %cst_4 : tensor<4096x!tt.ptr<bf16>, #blocked>
-%12 = ttg.convert_layout %kv_71 : tensor<4096xbf16, #blocked> -> tensor<4096xbf16, #blocked4>
-%14 = ttg.convert_layout %11 : tensor<4096x!tt.ptr<f32>, #blocked> -> tensor<4096x!tt.ptr<f32>, #blocked4>
-%15 = tt.atomic_rmw fadd, relaxed, gpu, %14, %13, %rmask_65 : (tensor<4096x!tt.ptr<f32>, #blocked4>, ...)
 
-// Runtime stride (ir/v5/v5.ttgir), epilogue loop
+// v5: key loads and sum atomics use the same layout.
 #blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
-%kv_66 = tt.load %kv_65, %rmask_60, %cst_4 : tensor<4096x!tt.ptr<bf16>, #blocked>
-%13 = tt.atomic_rmw fadd, relaxed, gpu, %11, %12, %rmask_60 : (tensor<4096x!tt.ptr<f32>, #blocked>, ...)
 ```
-
-The conversions pass through shared memory. In PTX, the constant-stride epilogue loop body contains 20 shared-memory stores, 20 shared-memory loads, and 20 barriers; the runtime-stride loop body contains none. These are static instruction counts.
-
-```
-// ir/v4/v4.ptx, epilogue loop (excerpt)
-@%p14 ld.global.v4.b32 { %r504, %r505, %r506, %r507 }, [ %rd79 + 0 ];
-bar.sync 0;
-st.shared.v4.b32 [%r44], {%r504, %r505, %r509, %r510};
-st.shared.v4.b32 [%r45+2048], {%r506, %r507, %r511, %r512};
-bar.sync 0;
-ld.shared.v4.b32 {%r595, %r596, %r597, %r598}, [%r46];
-...
-@%p18 atom.global.gpu.relaxed.add.f32 %r521, [ %rd83 + 0 ], %r522;
-```
-
-The original's tile atomic also converts the key tile, from 8 to 4 consecutive columns per thread, before the atomic. The timing comparisons therefore include both improved atomic access locality and removed layout-conversion work. Per-variant counts and the full excerpts are in [`results/remainder_and_sectors.txt`](results/remainder_and_sectors.txt).
+For these 1D layouts, `sizePerThread = [4]` assigns groups of four
+consecutive elements to each thread. In the first scalar atomic
+instruction, the threads at warp lanes 0, 1, and 2 therefore update
+elements 0, 4, and 8. With `sizePerThread = [1]`, those same threads
+update elements 0, 1, and 2.
 
 ## Limits
-
-Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid-index bits: its regret bound doubles whenever the centroid count doubles.
-
-Stress tests appending random unit-length centroids observed errors exceeding the fixed $2^{-12}$ tolerance at 4,096 and 8,192 centroids, consistent with that tradeoff. These added centroids are not fresh k-means solutions. The effect of these errors on downstream model quality has not been evaluated.
+Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2⁻¹²$ tolerance, consistent with that tradeoff. Whether the larger $C$ meaningfully affect downstream model quality has not been evaluated.
 
 Source: [Double-P](https://arxiv.org/abs/2602.05191). Terminology: [Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
 
