@@ -1,0 +1,116 @@
+# kernel_explained.ipynb cell 26, A100:
+# ncu --profile-from-start off --section SpeedOfLight --section ComputeWorkloadAnalysis --section MemoryWorkloadAnalysis
+#     --section Occupancy --section WarpStateStats --section LaunchStats python prof.py original normal
+
+==PROF== Connected to process 10080 (/usr/bin/python3.13)
+==PROF== Profiling "_assign" - 0: 0%....50%....100% - 15 passes
+profiled original on normal
+==PROF== Disconnected from process 10080
+[10080] python3.13@127.0.0.1
+  _assign (256, 8, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.59
+    SM Frequency                    Ghz         1.15
+    Elapsed Cycles                cycle    1,258,774
+    Memory Throughput                 %        62.68
+    DRAM Throughput                   %         3.92
+    Duration                         ms         1.09
+    L1/TEX Cache Throughput           %        64.92
+    L2 Cache Throughput               %        26.93
+    SM Active Cycles              cycle 1,209,442.88
+    Compute (SM) Throughput           %        49.60
+    ----------------------- ----------- ------------
+
+    OPT   Memory is more heavily utilized than Compute: Look at the Memory Workload Analysis section to identify the L1
+          bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes
+          transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or
+          whether there are values you can (re)compute.
+
+    Section: Compute Workload Analysis
+    -------------------- ----------- ------------
+    Metric Name          Metric Unit Metric Value
+    -------------------- ----------- ------------
+    Executed Ipc Active   inst/cycle         1.22
+    Executed Ipc Elapsed  inst/cycle         1.18
+    Issue Slots Busy               %        29.54
+    Issued Ipc Active     inst/cycle         1.22
+    SM Busy                        %        49.60
+    -------------------- ----------- ------------
+
+    INF   Tensor is the highest-utilized pipeline (49.6%) based on elapsed cycles in the workload, taking into account
+          the rates of its different instructions. It is the logical aggregation of individual tensor pipelines. It's
+          dominated by its Tensor (FP) sub-pipeline. It is well-utilized, but should not be a bottleneck.
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                                0
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s        79.85
+    Mem Busy                                         %        62.68
+    Max Bandwidth                                    %        56.70
+    L1/TEX Hit Rate                                  %            0
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        94.15
+    Mem Pipes Busy                                   %        28.35
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         9.42
+    Warp Cycles Per Executed Instruction           cycle         9.42
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    31.31
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could
+          enable the rule to provide more guidance.
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  2,048
+    Registers Per Thread             register/thread             166
+    Shared Memory Configuration Size           Kbyte          135.17
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block      Kbyte/block           40.96
+    Static Shared Memory Per Block        byte/block               0
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         262,144
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                6.32
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            3
+    Block Limit Shared Mem                block            3
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           12
+    Theoretical Occupancy                     %        18.75
+    Achieved Occupancy                        %        18.01
+    Achieved Active Warps Per SM           warp        11.53
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 81.25%
+          The 3.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the
+          hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required
+          registers, and the required amount of shared memory.

@@ -1,0 +1,133 @@
+# kernel_explained.ipynb cell 26 with KERNEL = "iter06", INPUT = "normal", A100:
+# ncu --profile-from-start off --section SpeedOfLight --section ComputeWorkloadAnalysis --section MemoryWorkloadAnalysis
+#     --section Occupancy --section WarpStateStats --section LaunchStats python prof.py iter06 normal
+
+==PROF== Connected to process 6351 (/usr/bin/python3.13)
+==PROF== Profiling "_assign_packed_kernel" - 0: 0%....50%....100% - 15 passes
+profiled iter06 on normal
+==PROF== Disconnected from process 6351
+[6351] python3.13@127.0.0.1
+  _assign_packed_kernel (256, 8, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 8.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- ------------
+    Metric Name             Metric Unit Metric Value
+    ----------------------- ----------- ------------
+    DRAM Frequency                  Ghz         1.59
+    SM Frequency                    Ghz         1.15
+    Elapsed Cycles                cycle      888,889
+    Memory Throughput                 %        60.49
+    DRAM Throughput                   %         5.61
+    Duration                         us       770.37
+    L1/TEX Cache Throughput           %        61.20
+    L2 Cache Throughput               %        28.04
+    SM Active Cycles              cycle      873,511
+    Compute (SM) Throughput           %        70.32
+    ----------------------- ----------- ------------
+
+    INF   Compute and Memory are well-balanced: To reduce runtime, both computation and memory traffic must be reduced.
+          Check both the Compute Workload Analysis and Memory Workload Analysis sections.
+
+    Section: Compute Workload Analysis
+    -------------------- ----------- ------------
+    Metric Name          Metric Unit Metric Value
+    -------------------- ----------- ------------
+    Executed Ipc Active   inst/cycle         1.23
+    Executed Ipc Elapsed  inst/cycle         1.21
+    Issue Slots Busy               %        30.34
+    Issued Ipc Active     inst/cycle         1.23
+    SM Busy                        %        70.32
+    -------------------- ----------- ------------
+
+    OPT   Tensor is the highest-utilized pipeline (70.3%) based on elapsed cycles in the workload, taking into account
+          the rates of its different instructions. It is the logical aggregation of individual tensor pipelines. It's
+          dominated by its Tensor (FP) sub-pipeline. The pipeline is well-utilized, but might become a bottleneck if
+          more work is added. Based on the number of executed instructions, the highest utilized pipeline (24.4%) is
+          ALU. It executes integer and logic operations. See the Profiling Guide
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-decoder) or hover over the
+          pipeline name to understand the workloads handled by each pipeline. The Instruction Statistics section shows
+          the mix of executed instructions for this workload. Check the Warp State Statistics section for which
+          reasons cause warps to stall.
+
+    Section: Memory Workload Analysis
+    -------------------------------------- ----------- ------------
+    Metric Name                            Metric Unit Metric Value
+    -------------------------------------- ----------- ------------
+    Local Memory Spilling Requests                                0
+    Local Memory Spilling Request Overhead           %      no data
+    Memory Throughput                          Gbyte/s       114.40
+    Mem Busy                                         %        60.49
+    Max Bandwidth                                    %        55.74
+    L1/TEX Hit Rate                                  %         2.41
+    L2 Persisting Size                           Mbyte         7.86
+    L2 Compression Success Rate                      %            0
+    L2 Compression Ratio                                          0
+    L2 Compression Input Sectors                sector            0
+    L2 Hit Rate                                      %        92.03
+    Mem Pipes Busy                                   %        27.87
+    -------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         9.41
+    Warp Cycles Per Executed Instruction           cycle         9.41
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    31.38
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could
+          enable the rule to provide more guidance.
+    ----- --------------------------------------------------------------------------------------------------------------
+    OPT   Est. Local Speedup: 30.37%
+          On average, each warp of this workload spends 2.9 cycles being stalled waiting on a fixed latency execution
+          dependency. Typically, this stall reason should be very low and only shows up as a top contributor in
+          already highly optimized kernels. Try to hide the corresponding instruction latencies by increasing the
+          number of active warps, restructuring the code or unrolling loops. Furthermore, consider switching to
+          lower-latency instructions, e.g. by making use of fast math compiler options. This stall type represents
+          about 30.4% of the total average of 9.4 cycles between issuing two instructions.
+    ----- --------------------------------------------------------------------------------------------------------------
+    INF   Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on
+          sampling data. The Profiling Guide
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details
+          on each stall reason.
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  2,048
+    Registers Per Thread             register/thread             168
+    Shared Memory Configuration Size           Kbyte          167.94
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block      Kbyte/block           49.15
+    Static Shared Memory Per Block        byte/block               0
+    # SMs                                         SM             108
+    Stack Size                                                 1,024
+    Threads                                   thread         262,144
+    # TPCs                                                        54
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                6.32
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            3
+    Block Limit Shared Mem                block            3
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           12
+    Theoretical Occupancy                     %        18.75
+    Achieved Occupancy                        %        18.05
+    Achieved Active Warps Per SM           warp        11.55
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 81.25%
+          The 3.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the
+          hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required
+          registers, and the required amount of shared memory.

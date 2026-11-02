@@ -1,0 +1,31 @@
+# README names: "gate keys" = evaluation set A, "held-out keys" = evaluation set B; "normal" = set A key set L3h1.
+# kernel_explained.ipynb section 6 (cell 24), A100, Nsight Compute with clocks locked (ncu default); columns trimmed to
+# the original and iter06 on real keys. One launch per column. "normal" = gate row L3h1 in all 8 batch slots.
+# The first row's label says "us", but the values are nanoseconds (original/normal = 1.09 ms in the full report);
+# the cell's unit conversion missed ncu's "ns" unit string. Fixed in the notebook since.
+# Atomic requests and sectors sum ncu's global reduction (op_red) and atomic (op_atom) counters.
+
+                                           original/normal iter06/normal
+Duration (us, clocks locked)                     1,092,736       771,552
+Compute (SM) throughput %                             49.5          70.2
+Memory throughput %                                   62.6          60.3
+L1/TEX throughput %                                   64.8          61.2
+L2 throughput %                                       26.9            28
+DRAM throughput %                                     3.91          5.61
+Tensor pipe, bf16 %                                   51.3          71.2
+Tensor pipe, int8 %                                      0             0
+Tensor pipe, any type %                               51.3          71.2
+Registers per thread                                   166           168
+Blocks/SM allowed by registers                           3             3
+Blocks/SM allowed by shared memory                       3             3
+Achieved occupancy %                                    18          18.1
+Warp cycles per issued instruction                     9.4          9.41
+  global loads (long scoreboard)                      1.66          0.67
+  global-memory queue full (lg throttle)              0.08          0.04
+  barrier                                             0.66          0.48
+  tensor/math pipe busy                               0.84           1.9
+  shared-memory queue full (mio throttle)             0.95          0.27
+  shared-memory results (short scoreboard)            1.36          1.56
+  fixed-latency wait                                  2.35          2.86
+Atomic requests (warp instructions)              1,056,768     1,056,768
+Atomic sectors per request                              16          4.12
