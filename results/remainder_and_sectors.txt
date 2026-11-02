@@ -1,0 +1,177 @@
+# kernel_explained.ipynb section 7, A100. "normal" = evaluation set A key set L3h1 in all 8 batch slots.
+# v1-v5 = the ablation variants (k_ablation.py, the original's launch settings); v6 = v5 with iter06's launch settings;
+# v8, v9 = v1, v2 with the tile atomic's column offset times stride_one (last two sections, a second run).
+#   v1 plain argmax, tile atomics          v4 packed, flat reload, stride visible to the compiler
+#   v2 packed argmax, tile atomics         v5 packed, flat reload, runtime stride (iter06 style)
+#   v3 plain argmax, flat reload, runtime stride
+# Compiled TTGIR, PTX and SASS for every kernel below: ir/<name>/.
+
+## Launch settings: variant 5 vs iter06 (iter06's tuner picked (128, 64, 4, 2, False) from its _CONFIGS)
+
+                  variant 5     iter06
+BLOCK_N                 128        128
+BLOCK_K                  32         64   <- differs
+EPI_ROWS                 32         16   <- differs
+REDUCE_EACH           False      False
+num_warps                 4          4
+num_stages                2          2
+grid            (256, 8, 1) (256, 8, 1)
+shared_bytes          40960      49152   <- differs
+registers               130        168   <- differs
+
+## Timing, same process, rotating rounds (median per-round ratio to the original)
+
+correctness on gate keys (phase-2 rule)
+  v5 + iter06 settings             PASS  worst cos gap 1.9e-04
+
+normal
+  original                         0.903 ms  1.000x vs original (rounds 1.000-1.000)
+  packed, flat (iter06 style)      0.714 ms  1.265x vs original (rounds 1.253-1.277)
+  v5 + iter06 settings             0.660 ms  1.370x vs original (rounds 1.365-1.388)
+  iter06                           0.653 ms  1.379x vs original (rounds 1.358-1.405)
+
+## Nsight Compute per variant (one launch each, clocks locked; duration in us)
+
+                                             original           v1           v2           v3           v4           v5           v6       iter06
+Duration (us, clocks locked)                    1,085        1,108        1,026          908          988          833          768          767
+Registers per thread                              166          164          168          130          128          130          168          168
+Achieved occupancy %                               18         17.9           18           18         23.6           18         18.1         18.1
+  global-memory queue full (lg throttle)         0.09         0.05         0.08         0.01         0.32         0.02         0.04         0.04
+Executed warp instructions                159,834,112  163,782,656  110,182,400  173,506,560  117,211,136  120,430,592  115,777,536  115,777,536
+Atomic requests (warp instructions)         1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768
+Atomic sectors per request                         16           16           16         4.12           16         4.12         4.12         4.12
+
+## Thread assignment of each atomic (layouts read from the TTGIR) and sectors per request replayed with the kernel's
+## own labels (batch slot 0); "Nsight" = measured above
+
+original  s   [128, 128] f32  sizePerThread [1, 4], threadsPerWarp [1, 32], warpsPerCTA [4, 1], order [1, 0]
+              one warp instruction: lanes 0-31 add key 0, columns 0, 4, ..., 124   -> 512 requests/block, 16.00 sectors/request
+          cnt [128] i32       sizePerThread [1], threadsPerWarp [32], warpsPerCTA [4], order [0]
+              one warp instruction: lanes 0-31 add keys 0-31                       ->   4 requests/block,  3.39 sectors/request
+          all: predicted 516 requests/block, 15.90 sectors/request; Nsight 516, 16.03
+v1, v2    same layouts as original                                                                    predicted 15.90; Nsight 16.03
+v3        s   [4096] f32      sizePerThread [1], threadsPerWarp [32], warpsPerCTA [4], order [0]
+              one warp instruction: lanes 0-31 add key 0, columns 0, 1, ..., 31    -> 512 requests/block,  4.00 sectors/request
+          cnt as original                                                                             predicted  4.00; Nsight  4.12
+v4        s   [4096] f32      sizePerThread [4], threadsPerWarp [32], warpsPerCTA [4], order [0]
+              one warp instruction: lanes 0-31 add key 0, columns 0, 4, ..., 124   -> 512 requests/block, 16.00 sectors/request
+          cnt as original                                                                             predicted 15.90; Nsight 16.03
+v5        s as v3                                                                                     predicted  4.00; Nsight  4.12
+v6, iter06 s  [2048] f32      sizePerThread [1], threadsPerWarp [32], warpsPerCTA [4], order [0]
+              one warp instruction: lanes 0-31 add key 0, columns 0, 1, ..., 31    -> 512 requests/block,  4.00 sectors/request
+          cnt as original                                                                             predicted  4.00; Nsight  4.12
+# The s atomics match exactly. The residual (0.12-0.13 sectors/request) is in the 4 cnt requests per block: about
+# 19-20 sectors each by subtraction, against 3.39 distinct sectors from their addresses. The same-address pass count in
+# the last section (19.23 per cnt request) accounts for it.
+
+## Static SASS instruction counts (a loop body counts once)
+
+          stages  shared regs  total   HMMA LDGSTS   LDSM    LDS    STS    BAR   SHFL  FMNMX    RED  ATOMG    LDG    STG
+original       2   40960  166   1192     64      8     32     29     37     24     16      4    129      0     16      1
+v1             2   40960  164   1424     64      8     32     37     38     24     16      4    129      0     16      1
+v2             2   40960  168   1376     64      8     32     39     36     22      8     68    129      0     16      1
+v3             2   40960  130   1168     64      8     32      5     20      7     16      4     33      0     80      1
+v4             2   40960  128   1016     64      8     32     27     38     25      8     68     33      0     24      1
+v5             2   40960  130   1112     64      8     32      7     18      5      8     68     33      0     80      1
+v6             2   49152  168   1216    128     16     48     17     30      8     18    138     17      0     48      1
+iter06         2   49152  168   1216    128     16     48     17     30      8     18    138     17      0     48      1
+# v6 and iter06 SASS are identical instruction for instruction once kernel names are normalized (diff of ir/v6/v6.sass
+# and ir/iter06/iter06.sass: 0 lines).
+## Why the constant stride also costs shared-memory work (static counts from ir/<name>/<name>.ptx)
+# Whole kernel. st.shared / ld.shared / bar.sync include the centroid pipeline and the argmax; atom.global is the
+# FP32 sum and INT32 count atomic adds (ptxas emits them as RED in SASS, since the returned value is unused).
+
+           st.shared  ld.shared  bar.sync  atom.global
+original          37         26        24          129
+v1                38         34        24          129
+v2                36         33        22          129
+v3                20          2         7           33
+v4                38         21        25           33
+v5                18          1         5           33
+v6                30         11         8           17
+iter06            30         11         8           17
+
+# Epilogue loop only (the PTX basic block that loops back to itself after the centroid loop):
+v4                20         20        20           32   ($L__BB0_5: loop body, runs 4 times per block)
+v5                 0          0         0           32   ($L__BB0_5: loop body, runs 4 times per block)
+
+# TTGIR, epilogue loop (ir/v4/v4.ttgir and ir/v5/v5.ttgir; loc() annotations removed)
+# v4, stride visible: loads 8 elements per thread, atomic 4 per thread, two layout conversions in between
+#blocked = #ttg.blocked<{sizePerThread = [8], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+#blocked4 = #ttg.blocked<{sizePerThread = [4], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+  %kv_71 = tt.load %kv_70, %rmask_64, %cst_4 : tensor<4096x!tt.ptr<bf16>, #blocked>
+  %12 = ttg.convert_layout %kv_71 : tensor<4096xbf16, #blocked> -> tensor<4096xbf16, #blocked4>
+  %14 = ttg.convert_layout %11 : tensor<4096x!tt.ptr<f32>, #blocked> -> tensor<4096x!tt.ptr<f32>, #blocked4>
+  %15 = tt.atomic_rmw fadd, relaxed, gpu, %14, %13, %rmask_65 : (tensor<4096x!tt.ptr<f32>, #blocked4>, tensor<4096xf32, #blocked4>, tensor<4096xi1, #blocked4>) -> tensor<4096xf32, #blocked4>
+# v5, runtime stride: one element per thread throughout, no conversion
+#blocked = #ttg.blocked<{sizePerThread = [1], threadsPerWarp = [32], warpsPerCTA = [4], order = [0]}>
+  %kv_66 = tt.load %kv_65, %rmask_60, %cst_4 : tensor<4096x!tt.ptr<bf16>, #blocked>
+  %13 = tt.atomic_rmw fadd, relaxed, gpu, %11, %12, %rmask_60 : (tensor<4096x!tt.ptr<f32>, #blocked>, tensor<4096xf32, #blocked>, tensor<4096xi1, #blocked>) -> tensor<4096xf32, #blocked>
+# original, tile atomics: the key tile is converted from [1, 8] to the atomic's [1, 4] layout
+#blocked1 = #ttg.blocked<{sizePerThread = [1, 8], threadsPerWarp = [2, 16], warpsPerCTA = [4, 1], order = [1, 0]}>
+#blocked2 = #ttg.blocked<{sizePerThread = [1, 4], threadsPerWarp = [1, 32], warpsPerCTA = [4, 1], order = [1, 0]}>
+  %9 = ttg.convert_layout %k_57 : tensor<128x128xbf16, #blocked1> -> tensor<128x128xbf16, #blocked2>
+  %11 = tt.atomic_rmw fadd, relaxed, gpu, %8, %10, %k_56 : (tensor<128x128x!tt.ptr<f32>, #blocked2>, tensor<128x128xf32, #blocked2>, tensor<128x128xi1, #blocked2>) -> tensor<128x128xf32, #blocked2>
+
+# SASS: each sum atomic is one scalar FP32 reduction per element held, e.g. (ir/v5/v5.sass)
+  /*3be0*/                   RED.E.ADD.F32.FTZ.RN.STRONG.GPU [R6.64], R115 ;
+  /*3c20*/                   RED.E.ADD.F32.FTZ.RN.STRONG.GPU [R8.64], R7 ;
+
+## Second run: tile atomics with the hidden stride (v8 = v1, v9 = v2, each with the tile atomic's column offset
+## multiplied by stride_one; no label reload, no key re-read)
+
+correctness on gate keys (phase-2 rule)
+  plain, tile, runtime stride      PASS  worst cos gap 0.0e+00
+  packed, tile, runtime stride     PASS  worst cos gap 1.9e-04
+
+normal (same process, rotating rounds)
+  original                         0.900 ms  1.000x vs original (rounds 1.000-1.000)
+  plain argmax, tile atomics       0.921 ms  0.978x vs original (rounds 0.975-0.985)
+  plain, tile, runtime stride      1.185 ms  0.760x vs original (rounds 0.757-0.765)
+  plain argmax, flat atomics       0.782 ms  1.149x vs original (rounds 1.143-1.166)
+  packed argmax, tile atomics      0.857 ms  1.051x vs original (rounds 1.041-1.064)
+  packed, tile, runtime stride     1.282 ms  0.703x vs original (rounds 0.695-0.706)
+  packed, flat (iter06 style)      0.718 ms  1.253x vs original (rounds 1.250-1.267)
+
+# Nsight Compute, every kernel in this second run (durations differ from the first run's table by up to 2%;
+# instruction, request and sector counts are identical)
+                                             original           v1           v2           v3           v4           v5           v6           v8           v9       iter06
+Duration (us, clocks locked)                    1,105        1,107        1,026          908          998          838          768        1,417        1,548          776
+Registers per thread                              166          164          168          130          128          130          168          168          254          168
+Achieved occupancy %                               18           18           18           18         23.6           18           18         17.9         12.3           18
+  global-memory queue full (lg throttle)         0.09         0.05         0.08         0.01         0.32         0.02         0.04         0.14         0.01         0.04
+Executed warp instructions                159,834,112  163,782,656  110,182,400  173,506,560  117,211,136  120,430,592  115,777,536  165,044,224  111,943,680  115,777,536
+Atomic requests (warp instructions)         1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768
+Atomic sectors per request                         16           16           16         4.12           16         4.12         4.12         31.9         31.9         4.12
+
+# Layout of the v8/v9 sum atomic (ir/v8/v8.ttgir, same in v9): one element per thread, but lanes run along keys
+#blocked3 = #ttg.blocked<{sizePerThread = [1, 1], threadsPerWarp = [32, 1], warpsPerCTA = [4, 1], order = [0, 1]}>
+  %21 = ttg.convert_layout %k_39 : tensor<128x128xbf16, #blocked1> -> tensor<128x128xbf16, #blocked3>
+  %23 = tt.atomic_rmw fadd, relaxed, gpu, %20, %22, %k_38 : (tensor<128x128x!tt.ptr<f32>, #blocked3>, ...)
+# one warp instruction: lanes 0-31 add keys 0-31, all at column 0 (each lane in its centroid's row, 512 bytes apart)
+# v8 and v9 still convert the key tile (#blocked1 [1, 8] -> #blocked3) through shared memory; v9 uses 254 registers
+# (no spills in its PTX), which drops achieved occupancy to 12.3%.
+
+          stages  shared regs  total   HMMA LDGSTS   LDSM    LDS    STS    BAR   SHFL  FMNMX    RED  ATOMG    LDG    STG
+v8             2   40960  168   1824     64      8     32     22     38     10     16      4    129      0     16      1
+v9             2   40960  254   1776     64      8     32     24     36      8      8     68    129      0     16      1
+
+## Sectors per request: two counting models vs Nsight
+# Each kernel's TTGIR layouts (ir/) replayed over every block with the exact fp32 labels of the "normal" key set
+# (the kernels' own labels differ on fewer than 0.05% of keys). Both columns combine 512 sum and 4 count requests per
+# block. "distinct": distinct 32-byte sectors per request. "passes": lanes that hit the same 4-byte address are
+# serviced in separate passes, so a sector counts once per pass (as many times as its most-hit address). The passes
+# column is a counting model that fits the counters; it is not documented hardware behavior.
+
+          distinct   passes   Nsight
+original     15.90    16.03    16.03
+v3            4.00     4.12     4.12
+v4           15.90    16.03    16.03
+v5            4.00     4.12     4.12
+v6            4.00     4.12     4.12
+v8            7.16    31.90    31.90
+v9            7.16    31.90    31.90
+iter06        4.00     4.12     4.12
+# Per request: sum atomics 16.00 / 4.00 / 32.00 under the passes model (original / flat reload / v8-v9), count
+# atomics 3.39 distinct, 19.23 passes. In v8/v9 every distinct centroid row is its own sector, so whether two lanes
+# share a centroid or not, each lane costs one sector access: 32 per request.

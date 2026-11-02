@@ -2,6 +2,8 @@
 # kernel_explained.ipynb section 4, ablation (cell 18), A100; trimmed to the real-key run. Steps from k_ablation.py,
 # all at the original's launch config (BLOCK_N=128, BLOCK_K=32, num_warps=4, num_stages=2).
 # "normal" = gate row L3h1 in all 8 batch slots.
+# Earlier run (section 4). The README's ablation and Nsight tables come from the later section 7 run, which re-timed
+# variant 5 (1.265x there) and added variant 5 with iter06's launch settings: see remainder_and_sectors.txt.
 
 correctness on gate keys (phase-2 rule)
   plain argmax, tile atomics       PASS  worst cos gap 0.0e+00
