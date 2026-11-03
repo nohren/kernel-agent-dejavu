@@ -4,11 +4,11 @@ I created a Claude driven agent loop that optimized Double-P’s Triton k-means 
 
 The main lessons: 
     
-    1. **Defer reduction ops outside of loops**
+1. **Defer reduction ops outside of loops**
 
-    2. **Precision can be sacrificed for speed when acceptable**
+2. **Precision can be sacrificed for speed when acceptable**
     
-    3. **Inspect the thread to address memory access patterns.** For example, a layout that benefits vector loads can be inefficient for scalar atomics.
+3. **Inspect the thread to address memory access patterns.** For example, a vector loads accesses several values per thread. A scalar atomic accesses one.  A layout that beneifts one can be inefficient for the other. 
 
 ## Workload and agent measurement
 
@@ -105,7 +105,7 @@ While Triton abstracts away much of the low level memory access patterns, unders
 ![perfect coalesced access](/img/perfectly_coa.png)
 
 
-**Pathalogically coalesced access. Loading 128 bytes across 16 x 32-byte sectors (128 / (16*32) = 0.25 memory utilization rate)**
+**Really badly coalesced access. Loading 128 bytes across 16 x 32-byte sectors (128 / (16*32) = 0.25 memory utilization rate)**
 ![pathalogically coalesced access](/img/patha_coa.png)
 
 
@@ -144,7 +144,7 @@ TTGIR shows the two layouts:
 The rule that if a thread requests a 4-byte word, the actual memory transaction the warp will generate to global memory will be 32 bytes in total applies everywhere. Whether several elements per thread hurts depends on how many instructions those elements take.  
 - This optimization applies to scalar memory instructions i.e instructions that compile to one instruction per element, as opposed to one instruction per many elements.
 
-## Recap of what the agent did, and how as a human we can apply these insights
+## Recap of what the agent did, and how we as humans can apply these insights
 
 1. **Reduce instruction count.**
    - Defered reductions until after the loop.
