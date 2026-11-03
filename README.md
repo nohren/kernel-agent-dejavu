@@ -158,10 +158,10 @@ The rule that if a thread requests a 4-byte word, the actual memory transaction 
    - **Verify:** check correctness, compiled layouts, sectors/request, and kernel time. Fewer sectors are useful only if the overall kernel benefits.
 
 ## Conclusion
-This took a few days to get to the bottom of.  Probably bc i'm new to this. I'm not sure agents are the best entities to learn from. Maybe that's why mathematics professors are pissed.  But it did help me understand the intricacies of memory layouts and instruction patterns underneath Triton so that is the plus.
+This took a few days to get to the bottom of.  Probably bc i'm new to this. I'm not sure agents are the best entities to learn from either. Maybe that's why mathematics professors are pissed.  But it did help me understand the intricacies of memory layouts and instruction patterns underneath Triton so that is the plus.
 
 ## Limits
-Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2⁻¹²$ tolerance, consistent with that tradeoff. Whether the larger $C$ meaningfully affect downstream model quality has not been evaluated.
+Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2^{-12}$ tolerance, consistent with that tradeoff. Whether a larger $C$ meaningfully affect downstream model quality has not been evaluated.
 
 Source: [1]: [Double-P](https://arxiv.org/abs/2602.05191). Terminology: [Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
 
