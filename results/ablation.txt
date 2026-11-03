@@ -20,3 +20,24 @@ normal
   packed, flat (stride visible)    0.835 ms  1.082x vs original (rounds 1.077-1.090)
   packed, flat (iter06 style)      0.722 ms  1.252x vs original (rounds 1.244-1.255)
   iter06                           0.660 ms  1.368x vs original (rounds 1.365-1.374)
+
+
+
+profiled original original
+profiled v1 plain argmax, tile atomics
+profiled v2 packed argmax, tile atomics
+profiled v3 plain argmax, flat atomics
+profiled v4 packed, flat (stride visible)
+profiled v5 packed, flat (iter06 style)
+profiled v6 v5 + iter06 settings
+profiled v8 plain, tile, runtime stride
+profiled v9 packed, tile, runtime stride
+profiled iter06 iter06
+                                             original           v1           v2           v3           v4           v5           v6           v8           v9       iter06
+Duration (us, clocks locked)                    1,105        1,107        1,026          908          998          838          768        1,417        1,548          776
+Registers per thread                              166          164          168          130          128          130          168          168          254          168
+Achieved occupancy %                               18           18           18           18         23.6           18           18         17.9         12.3           18
+  global-memory queue full (lg throttle)         0.09         0.05         0.08         0.01         0.32         0.02         0.04         0.14         0.01         0.04
+Executed warp instructions                159,834,112  163,782,656  110,182,400  173,506,560  117,211,136  120,430,592  115,777,536  165,044,224  111,943,680  115,777,536
+Atomic requests (warp instructions)         1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768
+Atomic sectors per request                         16           16           16         4.12           16         4.12         4.12         31.9         31.9         4.12
