@@ -1,14 +1,14 @@
 # Evaluating an agent optimized Triton kernel
 
-I created a Claude driven agent loop that optimized Double-P’s Triton k-means assignment kernel, achieving a **1.38× median speedup** on an A100 across 16 real Qwen2.5-1.5B layer KV head key sets. The sixth candidate, **iter06**, passed the specified correctness tolerance at 2,048 centroids.
+I created a Claude driven agent loop that optimized Double-P’s [1] Triton k-means assignment kernel, achieving a **1.38× median speedup** on an A100 across 16 real Qwen2.5-1.5B layer KV head key sets (8 per launch). The sixth candidate, **iter06**, passed the specified correctness tolerance at 2,048 centroids.
 
-The main lessons: 
+TLDR Takeaways:
     
 1. **Defer reduction ops outside of loops**
 
 2. **Precision can be sacrificed for speed when acceptable**
     
-3. **Inspect the thread to address memory access patterns.** For example, a vector loads accesses several values per thread. A scalar atomic accesses one.  A layout that beneifts one can be inefficient for the other. 
+3. **Inspect the thread to address memory access patterns.** For example, a vector load accesses several values per thread. A scalar atomic accesses one.  A layout that beneifts one can be inefficient for the other. 
 
 ## Workload and agent measurement
 
@@ -160,6 +160,6 @@ The rule that if a thread requests a 4-byte word, the actual memory transaction 
 ## Limits
 Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2⁻¹²$ tolerance, consistent with that tradeoff. Whether the larger $C$ meaningfully affect downstream model quality has not been evaluated.
 
-Source: [Double-P](https://arxiv.org/abs/2602.05191). Terminology: [Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
+Source: [1]: [Double-P](https://arxiv.org/abs/2602.05191). Terminology: [Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html).
 
 
