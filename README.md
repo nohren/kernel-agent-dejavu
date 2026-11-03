@@ -151,11 +151,14 @@ The rule that if a thread requests a 4-byte word, the actual memory transaction 
    - Packed scores and indices together.  Given the acceptable precision bound, it was able to use this technique effectively.
 
 2. **Match memory layouts to generated instructions.**
-   - Look for row scatter-adds such as `dest[idx[i], :] += src[i, :]`.
-   - **Measure:** 32 threads accessing four distinct FP32 values can fit into four aligned sectors per instruction. The original averaged 16.03 sectors/request.
-   - **Inspect:** read the atomic’s TTGIR layout and check PTX/SASS. Map the addresses accessed across lanes in one instruction; a layout suited to vector loads can be inefficient for scalar atomics.
+   - Identify the kind of instruction pattern. For instance atomic scatter adds ... `dest[idx[i], :] += src[i, :]`.
+   - **Measure:** 32 threads, four distinct FP32 values per thread, one value per instruction, then 32 * 4 = 128 bytes, then 128 bytes / 32 bytes a sector = 4 sectors.  We should be able to fit each instruction into 4 aligned sectors.
+   - **Inspect:** Nsight Compute to find 16.03 sectors/request. Something is wrong. Read the atomic’s TTGIR layout and check PTX/SASS. Map the addresses accessed across lanes in one instruction. A layout suited to vector loads can be inefficient for scalar atomics and vice versa.
    - **Experiment:** flat reload with runtime stride produced consecutive accesses across lanes. Runtime stride on the 2D tile instead spread lanes across keys and worsened performance. Neither change alone was sufficient here.
    - **Verify:** check correctness, compiled layouts, sectors/request, and kernel time. Fewer sectors are useful only if the overall kernel benefits.
+
+## Conclusion
+This took a few days to get to the bottom of.  Probably bc i'm new to this. I'm not sure agents are the best entities to learn from. Maybe that's why mathematics professors are pissed.  But it did help me understand the intricacies of memory layouts and instruction patterns underneath Triton so that is the plus.
 
 ## Limits
 Results cover one A100, one benchmark shape, and one model’s keys. Packing trades score precision for centroid index bits: its regret bound doubles whenever the centroid count doubles. Tests at 4,096 and 8,192 centroids observed errors exceeding the fixed $2⁻¹²$ tolerance, consistent with that tradeoff. Whether the larger $C$ meaningfully affect downstream model quality has not been evaluated.
