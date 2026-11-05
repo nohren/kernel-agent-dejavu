@@ -2,7 +2,7 @@
 
 **1.38× median kernel speedup on A100 across 16 real Qwen2.5-1.5B layer/head key sets, using Triton 3.6.0.**
 
-I built a Claude-driven optimization loop for [Double-P’s](https://arxiv.org/abs/2602.05191) k-means assignment kernel. **The agent generated and benchmarked revisions. I investigated why the winning candidate, `iter06`, worked**, using controlled ablations, Nsight Compute, and TTGIR/PTX/SASS inspection.
+I built a Claude driven optimization loop for [Double-P’s](https://arxiv.org/abs/2602.05191) k-means assignment kernel. **The agent generated and benchmarked revisions. I investigated why the winning candidate, `iter06`, worked**, using controlled ablations, Nsight Compute, and TTGIR/PTX/SASS inspection.
 
 The kernel assigns keys to centroids and accumulates their sums and counts. Each launch processes eight sets of 32,768 keys, with dimension 128 and 2,048 centroids.
 
