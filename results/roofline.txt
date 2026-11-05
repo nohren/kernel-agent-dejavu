@@ -1,0 +1,42 @@
+# README names: "normal" = evaluation set A key set L3h1 in all 8 batch slots.
+# kernel_explained.ipynb section 8 (roofline), A100, Nsight Compute with clocks locked; full output in
+# results/kernel_explained.ipynb, plot in img/roofline.png (section 8's plot cell, redrawn from these printed values).
+# iter06 is pinned to the settings the README reports (BLOCK_N 128, BLOCK_K 64, 4 warps, 2 stages); the first row
+# confirms the launch. An earlier unpinned run profiled a 256-key tile picked by iter06's own tuner (half the centroid
+# reads, so half the L1/L2 centroid bytes) and was discarded.
+# FLOPs = executed HMMA.16816.F32.BF16 x 4,096 (2*16*8*16). Bytes = l1tex__t_bytes, lts__t_bytes, dram__bytes.
+# Bandwidth ceilings = each counter's peak_sustained bytes/cycle x that level's measured clock. Tensor ceiling = 2,048
+# dense BF16 FLOP per SM per cycle x 108 SMs x the measured SM clock. "Time at peak rate" = work / ceiling for one
+# resource alone; these overlap, so the largest is a lower bound on the runtime.
+
+profiled original
+profiled iter06
+
+                                            original      iter06
+Blocks x threads per block               2,048 x 128 2,048 x 128
+Duration (us, clocks locked)                   1,097         770
+Tensor GFLOP, measured (HMMA x 4,096)          137.4       137.4
+Tensor GFLOP, from the shape (2BNCD)           137.4       137.4
+Achieved TFLOP/s                               125.3       178.6
+% of BF16 tensor ceiling                        49.6        70.1
+  Nsight tensor busy % (cross-check)            49.6        70.1
+L1 MB moved                                  1,683.8     1,381.8
+L2 MB moved                                  2,020.2     1,483.1
+DRAM MB moved                                   87.4        88.2
+L1 FLOP/byte                                      82          99
+L2 FLOP/byte                                      68          93
+DRAM FLOP/byte                                 1,572       1,559
+Time at peak rate, each alone (us):                             
+  BF16 tensor                                    544         540
+  L1                                              27          22
+  L2                                             242         177
+  DRAM                                            43          43
+  measured duration                            1,097         770
+
+ceilings at 1.141 GHz (SM), 108 SMs:
+  BF16 tensor    252.4 TFLOP/s
+  L1            63,112 GB/s   ridge    4.0 FLOP/byte
+  L2             8,352 GB/s   ridge   30.2 FLOP/byte
+  DRAM           2,039 GB/s   ridge  123.8 FLOP/byte
+
+saved /content/drive/MyDrive/kernel-agent/roofline.json

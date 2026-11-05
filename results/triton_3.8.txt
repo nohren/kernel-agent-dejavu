@@ -1,0 +1,143 @@
+# Triton 3.8.0 rerun of kernel_explained.ipynb, A100; full output in results/kernel_explained_triton_3.8.ipynb.
+# Triton 3.8.0 includes PR #10059 (https://github.com/triton-lang/triton/pull/10059): atomic layouts are capped at one
+# element per thread where the hardware has no vector form; for FP32 adds, every GPU before compute capability 9.0.
+# Everything else in results/ is Triton 3.6.0 (Colab's default). Compare ratios within a run, not times across runs;
+# Nsight times (clocks locked) moved by 1% or less between the runs for kernels the fix doesn't touch (v5, v6, iter06).
+# README names: "gate keys" = evaluation set A, "held-out keys" = evaluation set B; "normal" = set A key set L3h1.
+
+## Section 4: same-process speed (one key set at a time, 16 sets; Triton 3.6.0: iter06 1.36-1.40x, median 1.38x)
+iter06: 16 rows 1.40-1.42x (median 1.41x)
+phase2: 16 rows 1.29-1.31x (median 1.30x)
+
+## Section 4: ablation timing on "normal" (same process; variant names as in lab.py)
+  original                         0.929 ms  1.000x vs original (rounds 1.000-1.000)
+  plain argmax, tile atomics       0.980 ms  0.948x vs original (rounds 0.947-0.950)
+  packed argmax, tile atomics      0.881 ms  1.055x vs original (rounds 1.054-1.059)
+  plain argmax, flat atomics       0.796 ms  1.167x vs original (rounds 1.166-1.173)
+  packed, flat (stride visible)    0.871 ms  1.068x vs original (rounds 1.055-1.074)
+  packed, flat (iter06 style)      0.719 ms  1.293x vs original (rounds 1.286-1.327)
+  v5 + iter06 settings             0.662 ms  1.405x vs original (rounds 1.397-1.410)
+  plain, tile, runtime stride      0.990 ms  0.938x vs original (rounds 0.937-0.942)
+  packed, tile, runtime stride     0.881 ms  1.056x vs original (rounds 1.052-1.059)
+  deferred, unpacked, flat atomics 0.739 ms  1.260x vs original (rounds 1.252-1.270)
+  iter06                           0.662 ms  1.403x vs original (rounds 1.392-1.411)
+
+## Section 7: Nsight per variant on "normal" (clocks locked); sectors per request on Triton 3.6.0 were original/v1/v2/v4
+## 16.03, v8/v9 31.90, the rest 4.12. Registers on 3.6.0: original 166, v1 164, v2 168, v4 128, v8 168, v9 254, others
+## unchanged.
+profiled original original
+profiled v1 plain argmax, tile atomics
+profiled v2 packed argmax, tile atomics
+profiled v3 plain argmax, flat atomics
+profiled v4 packed, flat (stride visible)
+profiled v5 packed, flat (iter06 style)
+profiled v6 v5 + iter06 settings
+profiled v8 plain, tile, runtime stride
+profiled v9 packed, tile, runtime stride
+profiled v10 deferred, unpacked, flat atomics
+profiled iter06 iter06
+                                             original           v1           v2           v3           v4           v5           v6           v8           v9          v10       iter06
+Duration (us, clocks locked)                    1,125        1,190        1,058          941        1,037          838          775        1,196        1,059          857          768
+Registers per thread                              254          254          254          130          208          130          168          254          254          162          168
+Achieved occupancy %                             12.2         12.2         12.1         18.1         12.3           18           18         12.2         12.1           18           18
+  global-memory queue full (lg throttle)         0.12            0         0.01         0.01         0.01         0.02         0.04            0         0.01         0.01         0.04
+Executed warp instructions                142,909,440  148,086,784  112,164,864  156,450,816  118,734,848  120,324,096  115,572,736  148,111,360  112,181,248  139,288,576  115,572,736
+Atomic requests (warp instructions)         1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768    1,056,768
+Atomic sectors per request                       4.12         4.12         4.12         4.12         4.12         4.12         4.12         4.12         4.12         4.12         4.12
+
+## Section 6 full table. Its iter06/normal column (238 registers, 834 us) is a different config picked by iter06's own
+## tuner in that process; section 7 above and section 8 below show the README's config (168 registers).
+skipped (not available): none
+profiled original synthetic
+profiled original normal
+profiled iter06 synthetic
+profiled iter06 normal
+profiled int8 synthetic
+profiled int8 normal
+profiled phase2 synthetic
+profiled phase2 normal
+                                           original/synthetic original/normal iter06/synthetic iter06/normal int8/synthetic int8/normal phase2/synthetic phase2/normal
+Duration (us, clocks locked)                            1,118           1,132              772           834            824         810              843           850
+Compute (SM) throughput %                                48.6              48             70.5          65.2           66.1        41.3             64.5            64
+Memory throughput %                                      58.7            58.1             60.6          39.7           77.6        48.3             55.8          55.4
+L1/TEX throughput %                                      61.2            60.9             61.4          41.5           78.8        49.4             57.2          57.2
+L2 throughput %                                          18.3            18.1             28.1          14.5           26.4        13.7             25.9          25.7
+DRAM throughput %                                        3.83            3.81             5.56          5.24           5.74        5.47             7.86          6.44
+Tensor pipe, bf16 %                                      50.6            50.3             71.3          68.2           67.2           0             66.1          66.1
+Tensor pipe, int8 %                                         0               0                0             0              0        34.2                0             0
+Tensor pipe, any type %                                  50.6            50.3             71.3          68.2           67.2        34.2             66.1          66.1
+Registers per thread                                      254             254              168           238             96         128              168           168
+Blocks/SM allowed by registers                              2               2                3             2              5           1                3             3
+Blocks/SM allowed by shared memory                          2               2                3             2              4           1                3             3
+Achieved occupancy %                                     12.2            12.3               18          12.2           23.8        24.8             16.6          16.6
+Warp cycles per issued instruction                       7.24            7.31             9.39          7.06             12        9.38             9.04          9.01
+  global loads (long scoreboard)                         1.25            1.26             0.74          1.04           1.91        0.37                1          0.98
+  global-memory queue full (lg throttle)                  0.1            0.12             0.04          0.06           0.04        0.07             0.02          0.02
+  barrier                                                 0.4             0.4             0.48          0.11           0.99        0.65             0.51          0.51
+  tensor/math pipe busy                                  0.91            0.92             1.87          1.03           1.67        2.16             2.03          2.03
+  shared-memory queue full (mio throttle)                0.64            0.65             0.29          0.29           0.92        0.88             0.26          0.26
+  shared-memory results (short scoreboard)               0.52            0.52             1.49          0.25           1.87        1.21             0.59          0.59
+  fixed-latency wait                                     2.06            2.06             2.86          2.93           2.92        1.36             2.96          2.96
+Atomic requests (warp instructions)                 1,056,768       1,056,768        1,056,768     1,056,768      1,056,768   1,056,768        1,061,448     1,061,448
+Atomic sectors per request                               4.21            4.12             4.21          4.12           4.21        4.12             4.22          4.13
+
+## Section 7: the original's atomic layouts from its TTGIR (Triton 3.6.0: sum atomic sizePerThread [1, 4],
+## threadsPerWarp [1, 32], warpsPerCTA [4, 1], 16.03 sectors per request). v1, v2, v8 and v9 now get the same layout.
+original  original
+  s   [128, 128] f32: sizePerThread [1, 1], threadsPerWarp [1, 32], warpsPerCTA [1, 4], order [1, 0]
+      warp 0, one instruction: lanes 0-31 add keys [0], columns 0, 1, ..., 31 (step 1)
+      512 requests per block, 4.00 distinct sectors per request, 4.00 with same-address lanes in separate passes
+  cnt [128] i32: sizePerThread [1], threadsPerWarp [32], warpsPerCTA [4], order [0]
+      warp 0, one instruction: lanes 0-31 add keys 0, 1, ..., 31 (step 1)
+      4 requests per block, 3.39 distinct sectors per request, 19.23 with same-address lanes in separate passes
+  all atomics, predicted: 516 requests per block, 4.00 distinct sectors per request, 4.12 with same-address passes; Nsight: 516 requests per block, 4.12 sectors per request
+
+## Section 7: static SASS counts
+static SASS instruction counts; files in /content/drive/MyDrive/kernel-agent/ir-triton-3.8.0/<name>/
+
+          stages  shared regs  total   HMMA LDGSTS   LDSM    LDS    STS    BAR   SHFL  FMNMX    RED  ATOMG    LDG    STG
+original       2   40960  254   1208     64      8     48     36     35     22     16      4    129      0     16      1
+v1             2   40960  254   1592     64      8     48     68     36     22     16      4    129      0     16      1
+v2             2   40960  254   1616     64      8     48     71     36     22      8     68    129      0     16      1
+v3             2   40960  130   1104     64      8     32      4     18      5     16      4     33      0     80      1
+v4             2   40960  208   1112     64      8     36     23     38     13      8     68     33      0     24      1
+v5             2   40960  130   1104     64      8     32      7     18      5      8     68     33      0     80      1
+v6             2   49152  168   1184    128     16     48      9     22      7     24    144     17      0     48      1
+v8             2   40960  254   1592     64      8     48     68     36     22     16      4    129      0     16      1
+v9             2   40960  254   1616     64      8     48     71     36     22      8     68    129      0     16      1
+v10            2   40960  162   1328     64      8     32      7     18      5     16     36     33      0     80      1
+iter06         2   49152  168   1184    128     16     48      9     22      7     24    144     17      0     48      1
+
+## Section 8: roofline (iter06 pinned). This run predates the versioned file names, so it saved roofline.json over the
+## Triton 3.6.0 file on Drive; the 3.6.0 numbers are in results/roofline.txt.
+profiled original
+profiled iter06
+
+                                            original      iter06
+Blocks x threads per block               2,048 x 128 2,048 x 128
+Duration (us, clocks locked)                   1,125         777
+Tensor GFLOP, measured (HMMA x 4,096)          137.4       137.4
+Tensor GFLOP, from the shape (2BNCD)           137.4       137.4
+Achieved TFLOP/s                               122.2       176.8
+% of BF16 tensor ceiling                        48.3        70.1
+  Nsight tensor busy % (cross-check)            48.3        70.1
+L1 MB moved                                  1,281.2     1,381.8
+L2 MB moved                                  1,416.3     1,482.8
+DRAM MB moved                                   87.8        88.3
+L1 FLOP/byte                                     107          99
+L2 FLOP/byte                                      97          93
+DRAM FLOP/byte                                 1,566       1,557
+Time at peak rate, each alone (us):                             
+  BF16 tensor                                    543         545
+  L1                                              20          22
+  L2                                             170         178
+  DRAM                                            43          43
+  measured duration                            1,125         777
+
+ceilings at 1.143 GHz (SM), 108 SMs:
+  BF16 tensor    252.9 TFLOP/s
+  L1            63,222 GB/s   ridge    4.0 FLOP/byte
+  L2             8,354 GB/s   ridge   30.3 FLOP/byte
+  DRAM           2,039 GB/s   ridge  124.0 FLOP/byte
+
+saved /content/drive/MyDrive/kernel-agent/roofline.json

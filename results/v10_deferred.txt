@@ -1,0 +1,37 @@
+# README names: "gate keys" = evaluation set A; "normal" = set A key set L3h1 in all 8 batch slots.
+# kernel_explained.ipynb section 7, "Deferred argmax without packing (v10)", A100; full output in
+# results/kernel_explained.ipynb. v10 is variant 3's epilogue (flat reload, runtime stride) with the argmax deferred
+# like iter06's but not packed: a [keys x centroids] tile of best scores and one of their centroid indices, updated
+# elementwise and reduced once after the loop. v3, v10 and v5 all use the original's launch settings (BLOCK_N=128,
+# BLOCK_K=32, 4 warps, 2 stages, EPI_ROWS=32). Timing: same process, 7 interleaved rounds. Nsight: clocks locked.
+# This is a later run than the README's main ablation table; v3 and v5's instruction and sector counts match it exactly.
+
+correctness on gate keys (phase-2 rule)
+  deferred, unpacked, flat atomics PASS  worst cos gap 0.0e+00
+
+normal
+  original                         0.896 ms  1.000x vs original (rounds 1.000-1.000)
+  plain argmax, flat atomics       0.778 ms  1.151x vs original (rounds 1.147-1.163)
+  deferred, unpacked, flat atomics 0.733 ms  1.225x vs original (rounds 1.222-1.233)
+  packed, flat (iter06 style)      0.717 ms  1.249x vs original (rounds 1.241-1.266)
+
+                                                   v3          v10           v5
+Duration (us, clocks locked)                      918          865          839
+Registers per thread                              130          162          130
+Achieved occupancy %                               18         18.1           18
+  global-memory queue full (lg throttle)         0.01         0.01         0.02
+Executed warp instructions                173,506,560  138,584,064  120,430,592
+Atomic requests (warp instructions)         1,056,768    1,056,768    1,056,768
+Atomic sectors per request                       4.12         4.12         4.12
+
+          stages  shared regs  total   HMMA LDGSTS   LDSM    LDS    STS    BAR   SHFL  FMNMX    RED  ATOMG    LDG    STG
+v3             2   40960  130   1168     64      8     32      5     20      7     16      4     33      0     80      1
+v10            2   40960  162   1312     64      8     32      7     18      5     16     36     33      0     80      1
+v5             2   40960  130   1112     64      8     32      7     18      5      8     68     33      0     80      1
+
+# v3 -> v5 removes 53,075,968 executed warp instructions:
+#   deferring the reduction (v3 -> v10): 34,922,496 (65.8%)
+#   packing on top of it    (v10 -> v5): 18,153,472 (34.2%)
+# Same-process time, v3 -> v5 saves 0.061 ms: 0.045 ms (74%) from deferral, 0.016 ms (26%) from packing.
+# Registers: on an A100 (65,536 per SM, allocated per warp in units of 256), 129 to 168 registers per thread all fit
+# three 128-thread blocks per SM, so v10's 162 leaves occupancy where v3's and v5's 130 put it.
