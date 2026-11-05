@@ -1,4 +1,4 @@
-# Investigating an agent-optimized Triton kernel
+# Investigating an agent optimized Triton kernel
 
 **1.38× median kernel speedup on A100 across 16 real Qwen2.5-1.5B layer/head key sets, using Triton 3.6.0.**
 

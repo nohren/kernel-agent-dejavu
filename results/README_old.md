@@ -53,7 +53,7 @@ $$
 \qquad b=\lceil\log_2 C\rceil.
 $$
 
-This may not be worth it given the 3% speedup.
+
 
 
 **Flat reload epilogue.** After storing assignments, iter06 reloads keys in flat chunks before atomic accumulation. The kernel uses `@triton.jit(do_not_specialize=["stride_one"])`, and the caller passes `stride_one=1`. In this flat epilogue, preventing specialization to 1 changes the compiled layout: neighboring lanes update consecutive columns instead of every fourth column. The excerpt below runs after labels are stored and the block synchronizes; base pointers select the current batch item.
