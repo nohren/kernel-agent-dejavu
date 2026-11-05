@@ -67,7 +67,7 @@ The combined packing/deferral change removes 31–33% of instructions in the mat
 
 For packing With $C$ centroids, packing uses $b=\lceil\log_2 C\rceil$ index bits, leaving $23-b$ FP32 fraction bits. Scores with the same score bits can exchange order.  The score bit width bounds the packing only loss. 
 
-For a nonzero key and unit length centroids, the idealized packing  regret bound is:
+For a nonzero key and unit length centroids, the packing regret bound is:
 
 $$
 \frac{s_{\mathrm{best}}-s_{\mathrm{chosen}}}{\lVert k\rVert_2}
