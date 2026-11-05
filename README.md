@@ -30,7 +30,8 @@ The median of the 16 individual case speedups is **1.38×**. For every key, the 
 
 ## Two kernel changes
 
-**Packed argmax with a deferred reduction.** The original reduces each score tile to a maximum and index inside the centroid loop. iter06 replaces low score bits with the centroid index, maintains elementwise maxima across iterations, and performs one reduction after the loop. This reduces repeated reduction work at the cost of score precision.  It reduces the overall warp instructions as seen on Nsight compute by 31-33%.  Note that idx packing is necessary for this optimization since we are incrementing `BLOCK_K` at a time and the centroid idx is relative to that.
+**Packed argmax with a deferred reduction.** The original reduces each score tile to a maximum and index inside the centroid loop. iter06 replaces low score bits with the centroid index, maintains elementwise maxima across iterations, and performs one reduction after the loop. This reduces repeated reduction work at the cost of score precision.  It reduces the overall warp instructions as seen on Nsight compute by 31-33%.  Note that packing is not strictly necessary. We could instead still carry both a score tensor and an index tensor of size [BLOCK_N, BLOCK_K] updating them elementwise and then reducing after the loop.  The packing probably further reduces instructions but that has not been ablated.
+
 ```python
 # Inside the centroid loop:
 bits = ip.to(tl.int32, bitcast=True)
@@ -78,20 +79,20 @@ for r0 in range(0, BLOCK_N, EPI_ROWS):
 
 The following Nsight Compute measurements use one key set and locked clocks. They are separate from the benchmark timings above. All variants pass the specified checks at 2,048 centroids. **Constant** and **runtime** strides both equal 1 and only whether or not the compiler knows that value differs. “Packed” includes deferred reduction and “tile” refers to 2D tile accumulation from the tile that is already loaded.  "Flat reload" refers to reloading in 1D.
 
-| Variant | Argmax | Accumulation | Column stride | Time (µs) | Atomic sectors/request |
-|---|---|---|---|---:|---:|
-| Original | Plain | Tile | Constant | 1,105 | 16.03 |
-| v1: rewritten baseline | Plain | Tile | Constant | 1,107 | 16.03 |
-| v2 | Packed | Tile | Constant | 1,026 | 16.03 |
-| v3 | Plain | Flat reload | Runtime | 908 | 4.12 |
-| v4 | Packed | Flat reload | Constant | 998 | 16.03 |
-| v5 | Packed | Flat reload | Runtime | 838 | 4.12 |
-| v8 | Plain | Tile | Runtime | 1,417 | 31.90 |
-| v9 | Packed | Tile | Runtime | 1,548 | 31.90 |
-| v6: matched tile settings | Packed | Flat reload | Runtime | 768 | 4.12 |
-| iter06 | Packed | Flat reload | Runtime | 776 | 4.12 |
+| Variant | Argmax | Accumulation | Column stride | Time (µs) | Warp instructions (M) | Atomic sectors/request |
+|---|---|---|---|---:|---:|---:|
+| Original | Plain | Tile | Constant | 1,105 | 159.8 | 16.03 |
+| v1: rewritten baseline | Plain | Tile | Constant | 1,107 | 163.8 | 16.03 |
+| v2 | Packed | Tile | Constant | 1,026 | 110.2 | 16.03 |
+| v3 | Plain | Flat reload | Runtime | 908 | 173.5 | 4.12 |
+| v4 | Packed | Flat reload | Constant | 998 | 117.2 | 16.03 |
+| v5 | Packed | Flat reload | Runtime | 838 | 120.4 | 4.12 |
+| v8 | Plain | Tile | Runtime | 1,417 | 165.0 | 31.90 |
+| v9 | Packed | Tile | Runtime | 1,548 | 111.9 | 31.90 |
+| v6: matched tile settings | Packed | Flat reload | Runtime | 768 | 115.8 | 4.12 |
+| iter06 | Packed | Flat reload | Runtime | 776 | 115.8 | 4.12 |
 
-**Packing reduces instructions.** Matched comparisons show 31–33% fewer executed warp instructions, with unchanged sectors/request. Overall, iter06 executes 115.8M versus the original’s 159.8M instructions: **27.6% fewer**.
+**Packing reduces instructions.** Matched comparisons (v1→v2, v3→v5, v8→v9) show 31–33% fewer executed warp instructions, with unchanged sectors/request. Overall, iter06 executes 115.8M versus the original’s 159.8M instructions: **27.6% fewer**.
 
 **Flat reload and runtime stride work together here.** Flattening alone leaves sectors/request at 16.03. Runtime stride on the tile epilogue increases them to 31.90. Their combination reaches 4.12. Every variant issues 1,056,768 atomic requests, so the improvement is in how those requests access memory.
 
@@ -99,13 +100,14 @@ The following Nsight Compute measurements use one key set and locked clocks. The
 
 ## Reading the thread mapping beneath Triton
 
-While Triton abstracts away much of the low level memory access patterns, understanding how each thread (Nvidia also calls these warp lanes) maps to memory can be useful for optimizing memory performance.  A warp consists of 32 threads that each execute an instruction in lock step. As far as memory is concerned, Nvidia defines a sector as an aligned 32 byte-chunk of memory inside a cache-line or device memory([Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)). To get good memory performance, we want the warps coalesced memory access to result in as little memory transactions as possible.  A memory transaction is defined as a 32 byte sector load.  Loading a value loads a 32 byte sector.
+While Triton abstracts away much of the low level memory access patterns, understanding how each thread (Nvidia also calls these warp lanes) maps to memory can be useful for optimizing memory performance.  A warp consists of 32 threads that each execute an instruction in lock step. As far as memory is concerned, Nvidia defines a sector as an aligned 32 byte-chunk of memory inside a cache-line or device memory([Nsight Compute profiling guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html)). To get good memory performance, we want the warps coalesced memory access to result in as little memory transactions as possible.  A memory transaction is defined as a 32 byte sector load.  Remember, fetching a single value loads a 32 byte sector from memory.
 
-**Perfectly coalesced access. Loading 128 bytes across 4 x 32-byte sectors.**
+**Coalesced access. Loading 128B across 4 sectors.**
 ![perfect coalesced access](/img/perfectly_coa.png)
 
 
-**Really badly coalesced access. Loading 128 bytes across 16 x 32-byte sectors (128 / (16*32) = 0.25 memory utilization rate)**
+
+**Uncoalesced access. Loading 128B across 16 sectors (128 / (16*32) = 25% memory utilization rate)**
 ![pathalogically coalesced access](/img/patha_coa.png)
 
 
