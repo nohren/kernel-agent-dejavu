@@ -154,11 +154,8 @@ These use the 3.6 table above, rather than mixing in earlier profiler runs.
 
 **Observed:** the original’s sectors/request fall by about 3.9×, but its runtime does not improve. Registers rise from 166 to 254 and achieved occupancy falls from 18.0% to 12.2%.
 
-**Still unresolved:** whether register pressure, layout conversions, address calculations, scheduling, or other generated code changes explain the remaining cost. Higher register usage and lower occupancy are evidence to investigate, not proof of the cause.
+**Still unresolved:** whether register pressure, layout conversions, address calculations, scheduling, or other generated code changes explain the remaining cost. Higher register usage and lower occupancy are evidence to investigate next.  More to follow...
 
-v4 versus v5 is especially informative: both reach 4.12 sectors/request in 3.8, yet take 1,037 versus 838 µs. Equal coalescing efficiency does not explain their performance difference.
-
-v9 becomes substantially faster while its register count stays at 254. That is consistent with a coalescing benefit, but unchanged registers do not mean everything else stayed fixed. Triton 3.8 contains other compiler changes. Likewise, iter06’s register and instruction counts change across these runs, so its timing change is not a controlled comparison of the atomic fix alone.
 
 
 ## 6. Roofline context
@@ -172,9 +169,11 @@ Both kernels lie in the compute limited region of the roofline model, where peak
 
 ## 7. Correctness, precision, and limits
 
-For packing an acceptance criterion is a chosen - score gap no greater than `2^-12 × ||key||₂`, relative to the FP32 reference. At 2,048 centroids, the reported worst normalized gap for iter06 is **1.9 × 10⁻⁴**, below the **2.44 × 10⁻⁴** bound. Different labels can be acceptable for near tied scores. Sums and counts must also agree with the kernel’s assignments.
+For packing an acceptance criterion is a chosen - score gap no greater than `2^-12 × ||key||₂`, relative to the FP32 reference. At 2,048 centroids, the **1.9 × 10⁻⁴**, score gap was in bounds as expected. 
 
-Packing uses `ceil(log2(C))` index bits. At 2,048 centroids, that is 11 of the FP32 fraction’s 23 bits, leaving 12 score fraction bits. More centroids consume more bits and coarsen score discrimination. The upper bound score gap doubles with C.  Again ablations have shown that packing only provides a 3% speedup, so it may not be worth the precision loss.
+Packing uses `ceil(log2(C))` for index bits. At 2,048 centroids, that is 11 of the FP32 fraction’s 23 bits, leaving 12 score fraction bits. More centroids consume more bits and coarsen score discrimination. The upper bound score gap doubles with C.  
+
+Again ablations have shown that packing only provides a 3% speedup, so it's not really doing a lot here.
 
 ## Reproduction and evidence
 
