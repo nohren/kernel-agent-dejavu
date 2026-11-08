@@ -9,7 +9,7 @@ The kernel assigns keys to centroids and accumulates their sums and counts. Each
 ## Main findings
 
 - **Defer the reduction.** Moving argmax reduction after the centroid loop reduced repeated work. With the same epilogue and launch settings, deferral without packing reduced profiled runtime from **918 to 865 µs**. Packing indices into score bits reduced it further to **839 µs**, a 3% improvement.  This may not be worth the precision loss.
-- **Match the layout to the instruction.** Under Triton 3.6, the agent’s flat epilogue with a runtime stride of 1 reduced atomic sectors/request from **16 to 4.12**. Compiler IR showed neighboring lanes accessing consecutive columns instead of every fourth column.
+- **Match the layout to the instruction.** Under Triton 3.6, the agent’s flat epilogue with a runtime stride of 1 reduced atomic sectors/request from **16 to 4.12**. Compiler IR showed neighboring warp lanes accessing consecutive columns instead of every fourth column.
 - **Better coalescing does not guarantee a faster kernel.** Triton 3.8 fixed the measured coalescing issue, but the original kernel’s runtime did not improve in the profiling comparison below.
 
 ## Current question

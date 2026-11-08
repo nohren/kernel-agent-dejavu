@@ -106,9 +106,7 @@ For illustration:
 **Uncoalesced access. Loading 128B across 16 sectors (128 / (16*32) = 25% memory utilization rate)**
 ![pathalogically coalesced access](/img/patha_coa.png)
 
-The measured sectors/request ratio averages both sum and count atomics. It is not precisely the ideal four-sector sum-update example. 
-
-The original 3.6 IR inspection found `sizePerThread = [4]` for the flat constant-stride sum atomics versus `[1]` for the runtime-stride version. See [saved IR](ir/) for the complete layouts and generated instructions.
+The original 3.6 IR inspection found `sizePerThread = [4]` for the flat constant stride sum atomics versus `[1]` for the runtime stride version. See [saved IR](ir/) for the complete layouts and generated instructions.
 
 ```
 // v4, constant stride: key loads use #blocked; sum atomics use #blocked4.
@@ -121,7 +119,7 @@ The original 3.6 IR inspection found `sizePerThread = [4]` for the flat constant
 
 ## 5. Triton 3.8: coalescing fixed, performance question remains
 
-[Triton PR #10059](https://github.com/triton-lang/triton/pull/10059), included in 3.8, makes atomic coalescing account for narrower atomic instructions. Its FP32 add handling covers A100. The reported 3.8 IR gives the original sum atomic consecutive columns across lanes (`sizePerThread = [1, 1]`, `threadsPerWarp = [1, 32]`), instead of the earlier `[1, 4]` per-thread layout.
+[Triton PR #10059](https://github.com/triton-lang/triton/pull/10059), included in 3.8, makes atomic coalescing account for narrower atomic instructions. Its FP32 add handling covers A100. The reported 3.8 IR gives the original sum atomic consecutive columns across warp lanes (`sizePerThread = [1, 1]`, `threadsPerWarp = [1, 32]`), instead of the earlier `[1, 4]` per thread layout.
 
 All variants now report approximately **4.12 sectors/request**; the pasted output rounds iter06 to 4.1. Atomic request counts remain 1,056,768.
 
